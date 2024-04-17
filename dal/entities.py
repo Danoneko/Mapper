@@ -18,7 +18,7 @@ class Location:
     latitude: float
     longitude: float
 
-    search_distance: int = 100
+    search_distance: int = 300
 
 
 class GeoBroker(ABC):

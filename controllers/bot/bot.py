@@ -1,4 +1,3 @@
-import json
 import os
 from dataclasses import dataclass
 from typing import List
@@ -38,7 +37,7 @@ class TelegramBot:
     def get_categories_menu(self) -> InlineKeyboardMarkup:
         inline_buttons: List[List[InlineKeyboardButton]] = []
         for category_slug, category in self.geo_service.osm_categories_map.items():
-            button = InlineKeyboardButton(category.name, callback_data=category_slug)
+            button = InlineKeyboardButton(category_slug, callback_data=category_slug)
             inline_buttons.append([button])
 
         return InlineKeyboardMarkup(inline_buttons)
@@ -117,7 +116,6 @@ class TelegramBot:
         await context.bot.send_location(chat_id=update.effective_chat.id, latitude=node.latitude, longitude=node.longitude)
 
         return self.DISTANCE
-
     @staticmethod
     async def cancel(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         """Cancels and ends the conversation."""
