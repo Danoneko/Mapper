@@ -2,20 +2,17 @@ import dataclass_factory
 import yaml
 
 from dataclasses import dataclass
-from typing import List, Dict
 
 from redis import Redis
 
 from dal.redis.config import RedisConfiguration
-from services.bot.bot import TelegramBotConfiguration
+from controllers.bot.bot import TelegramBotConfiguration
 from services.geo.geo import OSMConfiguration
-
-
-from cmd.config import load_config, configure_redis
 from dal.open_maps_broker.open_maps_broker import OpenMapsBroker
 from dal.redis.osm_handlers import OSMRedisHelper
-from services.bot.bot import TelegramBot
+from controllers.bot.bot import TelegramBot
 from services.geo.geo import OSMService
+
 
 @dataclass
 class Config:

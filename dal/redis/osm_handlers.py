@@ -1,9 +1,6 @@
 import json
-
 from redis import Redis
-
 from dal.entities import Location, Node
-
 
 class OSMRedisHelper:
     def __init__(self, redis: Redis):

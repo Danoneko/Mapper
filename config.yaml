@@ -1,5 +1,5 @@
 redis:
-  host: "localhost"
+  host: "redis_for_osm"
   port: 6379
   database: 0 # редис дб не имеют имени, они индексируются с 0
   password_env_name: "REDIS_PASSWORD"
@@ -8,7 +8,7 @@ telegram_bot:
   workers_count: 1
 osm_broker:
   categories_to_amenities_map:
-    "catering":
+    "Питание":
       "name": "Питание"
       "amenities":
         [
@@ -20,7 +20,7 @@ osm_broker:
           "pub",
           "restaurant",
         ]
-    "education":
+    "Образование":
       "name": "Образование"
       "amenities":
         [
@@ -33,7 +33,7 @@ osm_broker:
           "school",
           "university",
         ]
-    "transport":
+    "Транспорт":
       "name": "Транспорт"
       "amenities":
         [
@@ -47,14 +47,14 @@ osm_broker:
           "parking",
           "taxi",
         ]
-    "finance":
+    "Финансы":
       "name": "Финансы"
       "amenities": ["atm", "bank", "bureau_de_change"]
-    "health":
+    "Здоровье":
       "name": "Здоровье"
       "amenities":
         ["clinic", "dentist", "doctors", "hospital", "pharmacy", "veterinary"]
-    "entertainment":
+    "Развлечение":
       "name": "Развлечение"
       "amenities":
         [
@@ -66,6 +66,6 @@ osm_broker:
           "nightclub",
           "theatre",
         ]
-    "other":
+    "Другое":
       "name": "Другое"
       "amenities": ["toilets", "recycling", "waste_disposal", "marketplace"]

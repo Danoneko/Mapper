@@ -1,4 +1,4 @@
-version: '3.8'
+version: "3.8"
 
 services:
   redis:
@@ -7,9 +7,24 @@ services:
     command: /bin/sh -c "redis-server --requirepass $$REDIS_PASSWORD"
     volumes:
       - ./redis-dаta:/root/redis
-      - ./redis.conf:/usr/local/etc/redis/redis.conf
+      - ./config.conf:/usr/local/etc/redis/redis.conf
     ports:
       - "6379:6379"
     env_file:
       - .env
     restart: always
+  main:
+    build:
+      context: .
+      dockerfile: ./Dockerfile
+    container_name: main
+    env_file:
+      - .env
+    restart: always
+    volumes:
+      - ./controllers:/bot/controllers
+      - ./cmd:/bot/cmd
+      - ./dal:/bot/dal
+      - ./services:/bot/services
+      - ./config.yaml:/bot/config.yaml
+      - ./main.py:/bot/main.py
