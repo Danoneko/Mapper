@@ -9,12 +9,12 @@ FROM builder AS bot
 RUN mkdir /bot
 WORKDIR /bot
 
-COPY ./cmd /bot/cmd
-COPY ./controllers /bot/controllers
-COPY ./dal /bot/dal
-COPY ./main.py /bot
-COPY ./services /bot/services
-COPY ./config.yaml /bot
-COPY ./main.py /bot
+COPY ./cmd ./cmd
+COPY ./controllers ./controllers
+COPY ./dal ./dal
+COPY ./main.py .
+COPY ./services ./services
+COPY ./config.yaml .
+COPY ./icon.jpg .
 
 CMD [ "python", "-u", "./main.py" ]

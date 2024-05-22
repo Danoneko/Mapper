@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from typing import List
 
 from dotenv import load_dotenv
-from telegram import InlineKeyboardMarkup, InlineKeyboardButton, Update
+from telegram import InlineKeyboardMarkup, InlineKeyboardButton, Update, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import CallbackContext, ContextTypes, Application, ConversationHandler, CommandHandler, \
     MessageHandler, filters, CallbackQueryHandler
 
@@ -21,7 +21,6 @@ class TelegramBotConfiguration:
 
     def __post_init__(self):
         load_dotenv()
-
         self.bot_token = os.environ.get(self.token_env_name)
 
 class TelegramBot:
@@ -29,7 +28,7 @@ class TelegramBot:
         self.bot_config = bot_config
         self.geo_service = geo_service
         self.redis = redis
-        self.LOCATION, self.DISTANCE, self.CATEGORY = range(3)
+        self.LOCATION, self.DISTANCE, self.CATEGORY, self.ROUTE_TYPE = range(4)
 
     def get_categories_menu(self) -> InlineKeyboardMarkup:
         inline_buttons: List[List[InlineKeyboardButton]] = []
@@ -50,9 +49,29 @@ class TelegramBot:
         return InlineKeyboardMarkup(inline_buttons)
 
     async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+        image_path = './icon.jpg'
+        new_route_keyboard = [[KeyboardButton("Начать новый маршрут!")]]
+        reply_markup = ReplyKeyboardMarkup(new_route_keyboard, resize_keyboard=True, one_time_keyboard=True)
+        with open(image_path, 'rb') as image_file:
+            await update.message.reply_photo(
+                photo=image_file,
+                reply_markup=reply_markup,
+                caption="Привет! 👋\n\nЭто бот-путеводитель. Я умею искать ближайшие и нужные для тебя места. А также уведомлять о приближении к пункту назначения.\n\nДавай начнем новый маршрут!\n📍📍📍"
+            )
+
+        return self.ROUTE_TYPE
+    
+    async def choose_route(self, update: Update, context: CallbackContext) -> int:
+        new_route_keyboard = [[KeyboardButton("Конкретный адрес"), KeyboardButton("Ближайшее место")]]
+        reply_markup = ReplyKeyboardMarkup(new_route_keyboard, resize_keyboard=True, one_time_keyboard=True)
         await update.message.reply_text(
-            "Привет! \nЯ бот по поиску ближайших мест. Прежде чем начать поиск, поделись своей live-геолокацией."
+            "Что ищем? 🧐",
+            reply_markup=reply_markup
         )
+        await update.message.reply_text(
+            "Чтобы начать искать поделись своей live-локацией 🧭"
+        )
+        
         return self.LOCATION
 
     async def location(self, update: Update, context) -> int:
@@ -61,11 +80,22 @@ class TelegramBot:
             message = update.edited_message
         else:
             message = update.message
+
         location = Location(latitude=message.location.latitude, longitude=message.location.longitude)
         await self.redis.set_location_info(message.chat_id, location)
-        await message.reply_text("Пожалуйста выберите категорию:", reply_markup=self.get_categories_menu())
 
-        return self.CATEGORY
+        choice = self.redis.get_choice_by_chat_id(message.chat_id)
+        if choice is None:
+            await message.reply_text("Выберите категорию:", reply_markup=self.get_categories_menu())
+            return self.CATEGORY
+        
+        dist = distance((message.location.latitude, message.location.longitude), (choice.latitude, choice.longitude)).meters
+        if dist <= 5:
+            self.redis.delete_choice_by_chat_id(message.chat_id)
+            await message.reply_message_text("Маршрут окончен!")
+            return self.ROUTE_TYPE
+        
+        await message.edit_message_text(f"Расстояние до {choice.name}: {dist:.2f} метров")
 
     async def list_nodes_for_category(self, update: Update, context: CallbackContext) -> int:
         query = update.callback_query
@@ -89,7 +119,7 @@ class TelegramBot:
             latitude=float(latitude),
             longitude=float(longitude),
         )
-        await self.redis.set_user_choice(query.chat_instance, node)
+        await self.redis.set_user_choice(query.message.chat.id, node)
         user_location = self.redis.get_location_by_chat_id(query.message.chat.id)
         dist = distance((user_location.latitude, user_location.longitude), (node.latitude, node.longitude)).meters
         await query.edit_message_text(f"Расстояние до {node.name}: {dist:.2f} метров")
@@ -100,8 +130,10 @@ class TelegramBot:
     @staticmethod
     async def cancel(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         """Cancels and ends the conversation."""
+        message = None
+        self.redis.delete_choice_by_chat_id(message.chat_id)
         await update.message.reply_text(
-            "До встречи! Попутешествуем в следующий раз!"
+            "До встречи! 👋\n\nПопутешествуем в следующий раз!"
         )
 
     def initialize_bot(self) -> Application:
@@ -111,7 +143,9 @@ class TelegramBot:
             states={
                 self.LOCATION: [MessageHandler(filters.LOCATION, self.location)],
                 self.CATEGORY: [CallbackQueryHandler(self.list_nodes_for_category)],
-                self.DISTANCE: [CallbackQueryHandler(self.calc_distance)]
+                self.DISTANCE: [CallbackQueryHandler(self.calc_distance)],
+                self.ROUTE_TYPE: [MessageHandler(filters.TEXT & filters.Regex('^Начать новый маршрут!$'), self.choose_route)],
+
             },
             fallbacks=[CommandHandler("cancel", self.cancel)],
         )
