@@ -28,7 +28,7 @@ class TelegramBot:
         self.bot_config = bot_config
         self.geo_service = geo_service
         self.redis = redis
-        self.LOCATION, self.DISTANCE, self.CATEGORY, self.ROUTE_TYPE, self.START_NEW_ROUTE = range(5)
+        self.LOCATION, self.DISTANCE, self.CATEGORY, self.NEW_ROUTE = range(4)
 
     def get_categories_menu(self) -> InlineKeyboardMarkup:
         inline_buttons: List[List[InlineKeyboardButton]] = []
@@ -62,26 +62,27 @@ class TelegramBot:
 Давай начнем новый маршрут!\
 \n📍📍📍'
             )
-        return self.START_NEW_ROUTE
+        return self.NEW_ROUTE
 
     async def start_new_route(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-        message = update.message
+        message = update.message if update.message else update.edited_message
         self.redis.delete_choice_by_chat_id(message.chat_id)
-        await update.message.reply_text("Чтобы начать искать поделись своей live-локацией 🧭")
-        return self.LOCATION
 
+        location = self.redis.get_location_by_chat_id(message.chat_id)
+        if location is None:
+            await message.reply_text("Чтобы начать новый маршрут, поделитесь своей live-геолокацией 🧭")
+            return self.LOCATION
+        
+        await message.reply_text("Выберите категорию:", reply_markup=self.get_categories_menu())
+        return self.CATEGORY
+        
     async def location(self, update: Update, context) -> int:
-        message = None
-        if update.edited_message:
-            message = update.edited_message
-        else:
-            message = update.message
+        message = update.message if update.message else update.edited_message
 
-        location = Location(latitude=message.location.latitude, longitude=message.location.longitude)
+        location = Location(latitude=message.location.latitude, longitude=message.location.longitude, live_period=message.location.live_period)
         await self.redis.set_location_info(message.chat_id, location)
         new_route_keyboard = [[KeyboardButton("Начать новый маршрут!")]]
         reply_markup = ReplyKeyboardMarkup(new_route_keyboard, resize_keyboard=True, one_time_keyboard=True)
-
 
         choice = self.redis.get_choice_by_chat_id(message.chat_id)
         if choice is None:
@@ -92,20 +93,10 @@ class TelegramBot:
         if dist <= 5:
             self.redis.delete_choice_by_chat_id(message.chat_id)
             await message.reply_text("Маршрут окончен!", reply_markup=reply_markup)
-            return self.START_NEW_ROUTE
+            return self.NEW_ROUTE
         
-        await message.reply_text(f"Расстояние до {choice.name}: {dist:.2f} метров")
-
-    async def choose_route(self, update: Update, context: CallbackContext) -> int:
-        text = update.message.text
-        if text == "Ближайшее место":
-            await update.message.reply_text("Выберите категорию:", reply_markup=self.get_categories_menu())
-            return self.CATEGORY
-        elif text == "Конкретный адрес":
-            # Handle specific address case
-            await update.message.reply_text("Введите адрес:")
-            # Assuming a new state for specific address handling can be added
-            # return self.LOCATION
+        await update.message.reply_text(f"Расстояние до {choice.name}: {dist:.2f} метров")
+        return self.LOCATION
 
     async def list_nodes_for_category(self, update: Update, context: CallbackContext) -> int:
         query = update.callback_query
@@ -122,7 +113,6 @@ class TelegramBot:
         name, latitude, longitude = query.data.split(",")
         if name == "0":
             await query.edit_message_text("Пожалуйста выберите категорию:", reply_markup=self.get_categories_menu())
-
             return self.CATEGORY
         node = Node(
             name=name,
@@ -137,7 +127,6 @@ class TelegramBot:
 
         return self.DISTANCE
     
-    @staticmethod
     async def cancel(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         """Cancels and ends the conversation."""
         message = update.message
@@ -145,20 +134,24 @@ class TelegramBot:
         await message.reply_text(
             "До встречи! 👋\n\nПопутешествуем в следующий раз!"
         )
+        return ConversationHandler.END
 
     def initialize_bot(self) -> Application:
         application = Application.builder().token(self.bot_config.bot_token).build()
         conv_handler = ConversationHandler(
             entry_points=[CommandHandler("start", self.start)],
             states={
-                self.START_NEW_ROUTE: [MessageHandler(filters.TEXT & filters.Regex('^Начать новый маршрут!$'), self.start_new_route)],
                 self.LOCATION: [MessageHandler(filters.LOCATION, self.location)],
                 self.CATEGORY: [CallbackQueryHandler(self.list_nodes_for_category)],
                 self.DISTANCE: [CallbackQueryHandler(self.calc_distance)],
-                self.ROUTE_TYPE: [MessageHandler(filters.TEXT, self.choose_route)],
+                self.NEW_ROUTE: [MessageHandler(filters.TEXT & filters.Regex('^Начать новый маршрут!$'), self.start_new_route)],
             },
             fallbacks=[CommandHandler("cancel", self.cancel)],
+            allow_reentry=True,  # This allows to reenter the conversation from any state
         )
         application.add_handler(conv_handler)
+
+        # Add a global handler for "Начать новый маршрут!" button
+        application.add_handler(MessageHandler(filters.TEXT & filters.Regex('^Начать новый маршрут!$'), self.start_new_route))
 
         return application

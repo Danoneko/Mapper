@@ -19,6 +19,7 @@ class Location:
     longitude: float
 
     search_distance: int = 300
+    live_period: int = None
 
 
 class GeoBroker(ABC):
