@@ -102,18 +102,35 @@ class TelegramBot:
         query = update.callback_query
         await query.answer()
         location = self.redis.get_location_by_chat_id(query.message.chat.id)
+        
+        if location is None:
+            await query.edit_message_text("Не удалось получить данные о вашем местоположении. Пожалуйста, попробуйте снова.")
+            return self.LOCATION
+        
         nodes = self.geo_service.get_nodes_for_category(category=query.data, user_location=location)
+        
+        if not nodes:
+            await query.edit_message_text("Не удалось найти места по выбранной категории. Пожалуйста, попробуйте снова.")
+            return self.CATEGORY
+        
         await query.edit_message_text("Выберите место:", reply_markup=self.get_nodes_menu(nodes))
-
         return self.DISTANCE
+
 
     async def calc_distance(self, update: Update, context: CallbackContext) -> int:
         query = update.callback_query
         await query.answer()
-        name, latitude, longitude = query.data.split(",")
-        if name == "0":
-            await query.edit_message_text("Пожалуйста выберите категорию:", reply_markup=self.get_categories_menu())
+        
+        try:
+            name, latitude, longitude = query.data.split(",")
+        except ValueError:
+            await query.edit_message_text("Произошла ошибка при обработке данных. Пожалуйста, попробуйте снова.")
             return self.CATEGORY
+        
+        if name == "0":
+            await query.edit_message_text("Пожалуйста, выберите категорию:", reply_markup=self.get_categories_menu())
+            return self.CATEGORY
+        
         node = Node(
             name=name,
             latitude=float(latitude),
@@ -121,6 +138,7 @@ class TelegramBot:
         )
         await self.redis.set_user_choice(query.message.chat.id, node)
         user_location = self.redis.get_location_by_chat_id(query.message.chat.id)
+        
         dist = distance((user_location.latitude, user_location.longitude), (node.latitude, node.longitude)).meters
         await query.edit_message_text(f"Расстояние до {node.name}: {dist:.2f} метров")
         await context.bot.send_location(chat_id=update.effective_chat.id, latitude=node.latitude, longitude=node.longitude)
@@ -142,16 +160,17 @@ class TelegramBot:
             entry_points=[CommandHandler("start", self.start)],
             states={
                 self.LOCATION: [MessageHandler(filters.LOCATION, self.location)],
-                self.CATEGORY: [CallbackQueryHandler(self.list_nodes_for_category)],
-                self.DISTANCE: [CallbackQueryHandler(self.calc_distance)],
+                self.CATEGORY: [CallbackQueryHandler(self.list_nodes_for_category, pattern="^.+$")],
+                self.DISTANCE: [CallbackQueryHandler(self.calc_distance, pattern="^.+$")],
                 self.NEW_ROUTE: [MessageHandler(filters.TEXT & filters.Regex('^Начать новый маршрут!$'), self.start_new_route)],
             },
             fallbacks=[CommandHandler("cancel", self.cancel)],
-            allow_reentry=True,  # This allows to reenter the conversation from any state
+            allow_reentry=True,
+            per_message=False  # или установите per_message=True, если требуется отслеживание для каждого сообщения
         )
         application.add_handler(conv_handler)
 
-        # Add a global handler for "Начать новый маршрут!" button
         application.add_handler(MessageHandler(filters.TEXT & filters.Regex('^Начать новый маршрут!$'), self.start_new_route))
 
         return application
+

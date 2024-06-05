@@ -17,6 +17,7 @@ osm_broker:
           "cafe",
           "fast_food",
           "food_court",
+          "ice_cream",
           "pub",
           "restaurant",
         ]
@@ -38,7 +39,9 @@ osm_broker:
       "amenities":
         [
           "bicycle_parking",
+          "bicycle_rental",
           "bus_station",
+          "car_rental",
           "car_wash",
           "vehicle_inspection",
           "charging_station",
@@ -49,11 +52,23 @@ osm_broker:
         ]
     "Финансы":
       "name": "Финансы"
-      "amenities": ["atm", "bank", "bureau_de_change"]
+      "amenities": 
+        [
+          "atm",
+          "bank",
+          "bureau_de_change",
+        ]
     "Здоровье":
       "name": "Здоровье"
       "amenities":
-        ["clinic", "dentist", "doctors", "hospital", "pharmacy", "veterinary"]
+        [
+          "clinic",
+          "dentist",
+          "doctors",
+          "hospital",
+          "pharmacy",
+          "veterinary",
+        ]
     "Развлечение":
       "name": "Развлечение"
       "amenities":
@@ -63,9 +78,36 @@ osm_broker:
           "community_centre",
           "conference_centre",
           "events_venue",
+          "exhibition_centre",
+          "music_venue",
           "nightclub",
+          "planetarium",
+          "public_bookcase",
           "theatre",
+        ]
+    "Общественное":
+      "name": "Общественное"
+      "amenities": 
+        [
+          "bbq",
+          "drinking_water",
+          "townhall", 
+          "post_office",
+          "parcel_locker",
+          "shower",
+          "telephone",
+          "toilets",
+          "water_point",
+          "marketplace",
+          "place_of_worship",
         ]
     "Другое":
       "name": "Другое"
-      "amenities": ["toilets", "recycling", "waste_disposal", "marketplace"]
+      "amenities": 
+        [
+          "recycling", 
+          "waste_disposal",
+          "photo_booth",
+          "grave_yard",
+          "animal_shelter",
+        ]
