@@ -4,8 +4,7 @@ from typing import List
 
 from dotenv import load_dotenv
 from telegram import InlineKeyboardMarkup, InlineKeyboardButton, Update, ReplyKeyboardMarkup, KeyboardButton
-from telegram.ext import CallbackContext, ContextTypes, Application, ConversationHandler, CommandHandler, \
-    MessageHandler, filters, CallbackQueryHandler
+from telegram.ext import CallbackContext, ContextTypes, Application, ConversationHandler, CommandHandler, MessageHandler, filters, CallbackQueryHandler
 
 from dal.entities import Location, Node
 from dal.redis.osm_handlers import OSMRedisHelper
@@ -33,20 +32,21 @@ class TelegramBot:
     def get_categories_menu(self) -> InlineKeyboardMarkup:
         inline_buttons: List[List[InlineKeyboardButton]] = []
         for category_slug, category in self.geo_service.osm_categories_map.items():
-            button = InlineKeyboardButton(category_slug, callback_data=category_slug)
+            button = InlineKeyboardButton(category.name, callback_data=category_slug)
             inline_buttons.append([button])
-
         return InlineKeyboardMarkup(inline_buttons)
 
     @staticmethod
     def get_nodes_menu(nodes: List[Node]) -> InlineKeyboardMarkup:
         inline_buttons: List[List[InlineKeyboardButton]] = []
         for node in nodes:
-            button = InlineKeyboardButton(node.name, callback_data=f"{node.name},{node.latitude},{node.longitude}")
+            callback_data = f"{node.name},{node.latitude},{node.longitude}"
+            if len(callback_data) > 64:
+                callback_data = callback_data[:64]  # Обрезаем строку до 64 символов
+            button = InlineKeyboardButton(node.name, callback_data=callback_data)
             inline_buttons.append([button])
-        inline_buttons.append([InlineKeyboardButton("Назад", callback_data="back")])
-
-        return InlineKeyboardMarkup(inline_buttons)
+        inline_buttons.append([InlineKeyboardButton("Назад", callback_data="0,0,0")])
+        return InlineKeyboardMarkup(inline_buttons)    
     
     def get_search_options_menu(self) -> InlineKeyboardMarkup:
         options = [
@@ -77,7 +77,7 @@ class TelegramBot:
             )
         return self.NEW_ROUTE
 
- # =====================================================================================================
+# =====================================================================================================
 
     async def new_route(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         message = update.message if update.message else update.edited_message
@@ -102,7 +102,7 @@ class TelegramBot:
         await message.reply_text("Что ищем?🧐", reply_markup=self.get_search_options_menu())
         return self.SELECT_ROUTE
       
- # =====================================================================================================
+# =====================================================================================================
 
     async def select_route(self, update: Update, context: CallbackContext) -> int:
         query = update.callback_query
@@ -114,22 +114,15 @@ class TelegramBot:
         elif query.data == "specific":
             await query.edit_message_text("Введите конкретный адрес:")
             return self.NEW_ROUTE
+        else:
+            await query.edit_message_text("Некорректный выбор, пожалуйста, попробуйте снова.")
+            return self.SELECT_ROUTE
    
 # =====================================================================================================
 
     async def category(self, update: Update, context: CallbackContext) -> int:
         query = update.callback_query
         await query.answer()
-
-        # Check if the user clicked "back" or the same category button again
-        if query.data == "back":
-            await query.edit_message_text("Что ищем?🧐", reply_markup=self.get_search_options_menu())
-            return self.SELECT_ROUTE
-
-        # Ensure the category exists in the osm_categories_map
-        if query.data not in self.geo_service.osm_categories_map:
-            await query.edit_message_text("Произошла ошибка при выборе категории. Пожалуйста, выберите снова:", reply_markup=self.get_categories_menu())
-            return self.CATEGORY
 
         location = self.redis.get_location_by_chat_id(query.message.chat.id)
         nodes = self.geo_service.get_nodes_for_category(category=query.data, user_location=location)
@@ -143,26 +136,29 @@ class TelegramBot:
     async def distance(self, update: Update, context: CallbackContext) -> int:
         query = update.callback_query
         await query.answer()
-        
+
         try:
             name, latitude, longitude = query.data.split(",")
         except ValueError:
-            await query.edit_message_text("Произошла ошибка при обработке данных. Пожалуйста, попробуйте снова.")
+            await query.edit_message_text("Некорректные данные, пожалуйста, попробуйте снова.")
+            return self.SELECT_ROUTE
+
+        if name == "0":
+            await query.edit_message_text("Пожалуйста выберите категорию:", reply_markup=self.get_categories_menu())
             return self.CATEGORY
-        
-        if name == "back":
-            await query.edit_message_text("Пожалуйста, выберите категорию:", reply_markup=self.get_categories_menu())
-            return self.CATEGORY
-        
+
         node = Node(
             name=name,
             latitude=float(latitude),
             longitude=float(longitude),
         )
+
         await self.redis.set_user_choice(query.message.chat.id, node)
+
         user_location = self.redis.get_location_by_chat_id(query.message.chat.id)
-        
+
         dist = distance((user_location.latitude, user_location.longitude), (node.latitude, node.longitude)).meters
+
         await query.edit_message_text(f"Расстояние до {node.name}: {dist:.2f} метров")
         await context.bot.send_location(chat_id=update.effective_chat.id, latitude=node.latitude, longitude=node.longitude)
 

@@ -2,21 +2,20 @@ import logging
 from typing import List
 
 import overpy
-from overpy import Node
+from overpy import Node as OverpyNode
 
 from dal.entities import GeoBroker, Location, Node
 from .entities import PartialNodeInfo
-
 
 class OpenMapsBroker(GeoBroker):
     def __init__(self):
         self.api = overpy.Overpass()
         self.logger = logging.getLogger('open_maps_broker')
 
-    def convert_api_node(self, api_node: overpy.Node) -> Node:
+    def convert_api_node(self, api_node: OverpyNode) -> Node:
         if api_node.tags.get("name") is None or api_node.lat == 0.0 or api_node.lon == 0.0:
             self.logger.warning(f'Partial NodeInfo, node: {api_node}')
-            raise PartialNodeInfo
+            raise PartialNodeInfo("Partial NodeInfo", api_node)
 
         return Node(name=api_node.tags.get("name"), latitude=api_node.lat, longitude=api_node.lon)
 
@@ -35,7 +34,8 @@ class OpenMapsBroker(GeoBroker):
             try:
                 node = self.convert_api_node(api_node)
                 nodes.append(node)
-            except PartialNodeInfo:
+            except PartialNodeInfo as e:
+                self.logger.warning(f"Skipping partial node: {e.node}")
                 continue
 
         return nodes
