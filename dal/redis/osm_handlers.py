@@ -24,6 +24,9 @@ class OSMRedisHelper:
                 longitude=data["longitude"],
                 live_period=data.get("live_period")
             )
+        
+    def delete_location_by_chat_id(self, chat_id: int):
+        return self.redis.delete(self.loc_prefix + str(chat_id))
 
     async def set_user_choice(self, chat_id: int, choice: Node):
         return self.redis.set(self.choice_prefix + str(chat_id), json.dumps({
