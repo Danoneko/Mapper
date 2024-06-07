@@ -45,7 +45,8 @@ class TelegramBot:
                 callback_data = callback_data[:64]  # Обрезаем строку до 64 символов
             button = InlineKeyboardButton(node.name, callback_data=callback_data)
             inline_buttons.append([button])
-        inline_buttons.append([InlineKeyboardButton("Назад", callback_data="0,0,0")])
+
+        inline_buttons.append([InlineKeyboardButton("Назад", callback_data="back")])
         return InlineKeyboardMarkup(inline_buttons)    
     
     def get_search_options_menu(self) -> InlineKeyboardMarkup:
@@ -107,27 +108,44 @@ class TelegramBot:
     async def select_route(self, update: Update, context: CallbackContext) -> int:
         query = update.callback_query
         await query.answer()
-        
+
         if query.data == "nearest":
             await query.edit_message_text("Выберите категорию:", reply_markup=self.get_categories_menu())
             return self.CATEGORY
         elif query.data == "specific":
             await query.edit_message_text("Введите конкретный адрес:")
             return self.NEW_ROUTE
+        elif query.data == "back":
+            await query.edit_message_text("Что ищем?🧐", reply_markup=self.get_search_options_menu())
+            return self.SELECT_ROUTE
         else:
             await query.edit_message_text("Некорректный выбор, пожалуйста, попробуйте снова.")
             return self.SELECT_ROUTE
-   
+
 # =====================================================================================================
 
     async def category(self, update: Update, context: CallbackContext) -> int:
         query = update.callback_query
         await query.answer()
 
-        location = self.redis.get_location_by_chat_id(query.message.chat.id)
-        nodes = self.geo_service.get_nodes_for_category(category=query.data, user_location=location)
+        if query.data == "back":
+            await query.edit_message_text("Что ищем?🧐", reply_markup=self.get_search_options_menu())
+            return self.SELECT_ROUTE
 
-        await query.edit_message_text("Выберите место:", reply_markup=self.get_nodes_menu(nodes))
+        location = self.redis.get_location_by_chat_id(query.message.chat.id)
+
+        try:
+            nodes = self.geo_service.get_nodes_for_category(category=query.data, user_location=location)
+        except KeyError:
+            back_button = InlineKeyboardMarkup([[InlineKeyboardButton("Назад", callback_data="back")]])
+            await query.edit_message_text("По вашему запросу ничего не найдено. Пожалуйста, выберите категорию:", reply_markup=back_button)
+            return self.CATEGORY
+
+        if nodes:
+            await query.edit_message_text("Выберите место:", reply_markup=self.get_nodes_menu(nodes))
+        else:
+            back_button = InlineKeyboardMarkup([[InlineKeyboardButton("Назад", callback_data="back")]])
+            await query.edit_message_text("По вашему запросу ничего не найдено", reply_markup=back_button)
 
         return self.DISTANCE
 
@@ -137,14 +155,14 @@ class TelegramBot:
         query = update.callback_query
         await query.answer()
 
+        if query.data == "back":
+            await query.edit_message_text("Выберите категорию:", reply_markup=self.get_categories_menu())
+            return self.CATEGORY
+
         try:
             name, latitude, longitude = query.data.split(",")
         except ValueError:
-            await query.edit_message_text("Некорректные данные, пожалуйста, попробуйте снова.")
-            return self.SELECT_ROUTE
-
-        if name == "0":
-            await query.edit_message_text("Пожалуйста выберите категорию:", reply_markup=self.get_categories_menu())
+            await query.edit_message_text("Выберите категорию:", reply_markup=self.get_categories_menu())
             return self.CATEGORY
 
         node = Node(
