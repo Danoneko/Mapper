@@ -41,8 +41,8 @@ class TelegramBot:
         inline_buttons: List[List[InlineKeyboardButton]] = []
         for node in nodes:
             callback_data = f"{node.name},{node.latitude},{node.longitude}"
-            if len(callback_data) > 64:
-                callback_data = callback_data[:64]  # Обрезаем строку до 64 символов
+            if len(callback_data.encode('utf-8')) > 64:
+                callback_data = callback_data.encode('utf-8')[:64].decode('utf-8', 'ignore')  # Обрезаем строку до 64 символов
             button = InlineKeyboardButton(node.name, callback_data=callback_data)
             inline_buttons.append([button])
 
@@ -100,8 +100,16 @@ class TelegramBot:
         
         await self.redis.set_location_info(message.chat_id, location)
 
-        await message.reply_text("Что ищем?🧐", reply_markup=self.get_search_options_menu())
-        return self.SELECT_ROUTE
+        choice = self.redis.get_choice_by_chat_id(message.chat_id)
+        if choice:
+            dist = distance((location.latitude, location.longitude), (choice.latitude, choice.longitude)).meters
+            await message.edit_message_text(f"Обновленное расстояние до {choice.name}: {dist:.2f} метров")
+            if dist <= 5:
+                await self.redis.delete_choice_by_chat_id(message.chat_id)
+                new_route_keyboard = [[KeyboardButton("Начать новый маршрут!")]]
+                reply_markup = ReplyKeyboardMarkup(new_route_keyboard, resize_keyboard=True, one_time_keyboard=True)
+                await message.edit_message_text("Маршрут окончен!", reply_markup=reply_markup)
+                return self.NEW_ROUTE
       
 # =====================================================================================================
 
@@ -177,19 +185,22 @@ class TelegramBot:
 
         if choice is None:
             await self.redis.set_user_choice(query.message.chat.id, node)
-            await context.bot.send_location(chat_id=update.effective_chat.id, latitude=node.latitude, longitude=node.longitude)
-
+        
+        # Сначала отправляем карту с местоположением
+        await context.bot.send_location(chat_id=update.effective_chat.id, latitude=node.latitude, longitude=node.longitude)
 
         new_route_keyboard = [[KeyboardButton("Начать новый маршрут!")]]
         reply_markup = ReplyKeyboardMarkup(new_route_keyboard, resize_keyboard=True, one_time_keyboard=True)
+        
+        # Затем отправляем сообщение с расстоянием
         if dist <= 5:
             self.redis.delete_choice_by_chat_id(query.message.chat_id)
-            await query.message.edit_message_text("Маршрут окончен!", reply_markup=reply_markup)
+            await query.message.reply_text("Маршрут окончен!", reply_markup=reply_markup)
             return self.NEW_ROUTE
 
-        await query.edit_message_text(f"Расстояние до {node.name}: {dist:.2f} метров")
+        await query.message.reply_text(f"Расстояние до {node.name}: {dist:.2f} метров")
 
-        return self.DISTANCE
+        return self.LOCATION
 
 # =====================================================================================================  
 
