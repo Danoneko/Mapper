@@ -18,7 +18,7 @@ class Location:
     latitude: float
     longitude: float
 
-    search_distance: int = 300
+    search_distance: int = 500
     live_period: int = None
 
 

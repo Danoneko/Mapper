@@ -172,14 +172,14 @@ class TelegramBot:
         )
 
         choice = self.redis.get_choice_by_chat_id(query.message.chat_id)
-
+        user_location = self.redis.get_location_by_chat_id(query.message.chat.id)
         dist = distance((user_location.latitude, user_location.longitude), (node.latitude, node.longitude)).meters
 
         if choice is None:
             await self.redis.set_user_choice(query.message.chat.id, node)
             await context.bot.send_location(chat_id=update.effective_chat.id, latitude=node.latitude, longitude=node.longitude)
 
-        user_location = self.redis.get_location_by_chat_id(query.message.chat.id)
+
         new_route_keyboard = [[KeyboardButton("Начать новый маршрут!")]]
         reply_markup = ReplyKeyboardMarkup(new_route_keyboard, resize_keyboard=True, one_time_keyboard=True)
         if dist <= 5:
